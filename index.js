@@ -1,8 +1,10 @@
 var spawn = require('child_process').spawn;
+var fs = require('fs')
 
 var pandocRenderer = function(data, options, callback){
   var config = hexo.config.pandoc;
   var extensions = '', filters = [], extra = [], meta = [], math = '--mathjax';
+  let macrosFile;
 
   if(config) {
     if(config.extensions) {
@@ -10,7 +12,7 @@ var pandocRenderer = function(data, options, callback){
         extensions += extension;
       });
     }
-	  
+    
     if(config.filters) {
       config.filters.forEach(function(filter) {
         filters.push('--filter');
@@ -46,49 +48,57 @@ var pandocRenderer = function(data, options, callback){
         math = '--' + config.mathEngine;
       }
     }
+
+    if(config.macros) {
+      macrosFile = config.macros;
+    }
   }
 
-  var args = [ '-f', 'markdown'+extensions, '-t', 'html', math]
-  .concat(filters)
-  .concat(extra)
-  .concat(meta);
-	
+  var args = ['-f', 'markdown'+extensions, '-t', 'html', math]
+      .concat(filters)
+      .concat(extra)
+      .concat(meta);
+  
   if(config && config.template) args.push("--template=" + config.template);
 
-	var src = data.text.toString();
+  var src = data.text.toString();
 
-	var pandoc = spawn('pandoc', args);
+  var pandoc = spawn('pandoc', args);
 
-	var result = '';
-	var error = '';
+  var result = '';
+  var error = '';
 
-	pandoc.stdout.setEncoding('utf8');
+  pandoc.stdout.setEncoding('utf8');
 
-	pandoc.stdout.on('data', function (data) {
-		result += data.toString();
-	});
+  pandoc.stdout.on('data', function (data) {
+    result += data.toString();
+  });
 
-	pandoc.stderr.on('data', function (data) {
-		error += data.toString();
-	});
+  pandoc.stderr.on('data', function (data) {
+    error += data.toString();
+  });
 
-	pandoc.stdin.write(src, 'utf8');
+  // if a macros file is defined, add it first
+  if (macrosFile) {
+    pandoc.stdin.write(fs.readFileSync(macrosFile, {encoding: 'utf-8'}), 'utf-8')
+  }
+  pandoc.stdin.write(src, 'utf8');
 
-	pandoc.on('close', function (code, signal) {
-		var msg = '';
-		if (code !== 0)
-			msg += 'pandoc exited with code '+code+(error ? ': ' : '.');
-		if (error)
-			msg += error;
-		if (msg)
-			return callback(new Error(msg));
-		else{
-			if (result === '') console.log("The next file error: ");
-			callback(null, result);
-		}
-	});
+  pandoc.on('close', function (code, signal) {
+    var msg = '';
+    if (code !== 0)
+      msg += 'pandoc exited with code '+code+(error ? ': ' : '.');
+    if (error)
+      msg += error;
+    if (msg)
+      return callback(new Error(msg));
+    else{
+      if (result === '') console.log("The next file error: ");
+      callback(null, result);
+    }
+  });
 
-    pandoc.stdin.end();
+  pandoc.stdin.end();
 
 }
 
